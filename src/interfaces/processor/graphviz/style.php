@@ -39,4 +39,18 @@ abstract class plGraphvizProcessorStyle
     public $classTitleFontsize              = 12;
     public $classAttributesFontsize         = 10;
     public $classFunctionsFontsize          = 10;
+
+    public $traitTableBorder                = 1;
+    public $traitTitleBackground            = '#57feff';
+    public $traitAttributesBackground       = '#eeeeec';
+    public $traitFunctionsBackground        = '#eeeeec';
+    public $traitTitleColor                 = '#2e3436';
+    public $traitAttributesColor            = '#2e3436';
+    public $traitFunctionsColor             = '#2e3436';
+    public $traitTitleFont                  = 'Helvetica';
+    public $traitAttributesFont             = 'Helvetica';
+    public $traitFunctionsFont              = 'Helvetica';
+    public $traitTitleFontsize              = 12;
+    public $traitAttributesFontsize         = 10;
+    public $traitFunctionsFontsize          = 10;
 }

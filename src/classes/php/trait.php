@@ -1,17 +1,15 @@
 <?php
 
-class plPhpClass
+class plPhpTrait #extends plPhpClass
 {
-    protected $properties;
+    private $properties;
 
-    public function __construct( $name, $attributes = array(), $functions = array(), $implements = array(), $extends = null, $uses = array() )
+    public function __construct( $name, $attributes = array(), $functions = array(), $uses = array() ) 
     {
         $this->properties = array( 
             'name'          =>  $name,
             'attributes'    =>  $attributes,
             'functions'     =>  $functions,
-            'implements'    =>  $implements,
-            'extends'       =>  $extends,
             'uses'          =>  $uses,
         );
     }
@@ -31,8 +29,7 @@ class plPhpClass
         {
             throw new plBasePropertyException( $key, plBasePropertyException::WRITE );
         }
-        $this->properties[$key] = $val;            
+        $this->properties[$key] = $val;
     }
 }
 
-?>

@@ -49,6 +49,10 @@ class plGraphvizProcessor extends plProcessor
             {
                 $this->output .= $this->getInterfaceDefinition( $object );
             }
+            else if ( $object instanceof plPhpTrait )
+            {
+                $this->output .= $this->getTraitDefinition( $object );
+            }
         }
 
         $this->output .= "}";
@@ -168,6 +172,126 @@ class plGraphvizProcessor extends plProcessor
                 $this->getUniqueId( $interface ),
                 $this->getUniqueId( $o ),
                 array( 
+                    'dir'       => 'back',
+                    'arrowtail' => 'normal',
+                    'style'     => 'dashed',
+                )
+            );
+        }
+
+        // Create class uses relation
+        foreach( $o->uses as $trait )
+        {
+            // Check if we need an "external" interface node
+            if ( in_array( $trait, $this->structure ) !== true )
+            {
+                $def .= $this->getTraitDefinition( $trait );
+            }
+
+            $def .= $this->createNodeRelation(
+                $this->getUniqueId( $trait ),
+                $this->getUniqueId( $o ),
+                array(
+                    'dir'       => 'back',
+                    'arrowtail' => 'normal',
+                    'style'     => 'dashed',
+                )
+            );
+        }
+
+        return $def;
+    }
+
+    private function getTraitDefinition( $o )
+    {
+        $def = '';
+
+        // First we need to create the needed data arrays
+        $name = $o->name;
+
+        $attributes = array();
+        $associations = array();
+        foreach( $o->attributes as $attribute )
+        {
+            $attributes[] = $this->getModifierRepresentation( $attribute->modifier ) . $attribute->name;
+
+            // Association creation is optional
+            if ( $this->options->createAssociations === false )
+            {
+                continue;
+            }
+
+            // Create associations if the attribute type is set
+            if ( $attribute->type !== null && array_key_exists( $attribute->type, $this->structure ) && !array_key_exists( strtolower( $attribute->type ), $associations ) )
+            {
+                $def .= $this->createNodeRelation(
+                    $this->getUniqueId( $this->structure[$attribute->type] ),
+                    $this->getUniqueId( $o ),
+                    array(
+                        'dir'       => 'back', // is this required?
+                        'arrowtail' => 'none',
+                        'style'     => 'dashed',
+                    )
+                );
+                $associations[strtolower( $attribute->type )] = true;
+            }
+        }
+
+        $functions = array();
+        foreach( $o->functions as $function )
+        {
+            $functions[] = $this->getModifierRepresentation( $function->modifier ) . $function->name . $this->getParamRepresentation( $function->params );
+
+            // Association creation is optional
+            if ( $this->options->createAssociations === false )
+            {
+                continue;
+            }
+
+            // Create association if the function is the constructor and takes
+            // other classes as parameters
+            if ( strtolower( $function->name ) === '__construct' )
+            {
+                foreach( $function->params as $param )
+                {
+                    if ( $param->type !== null && array_key_exists( $param->type, $this->structure ) && !array_key_exists( strtolower( $param->type ), $associations ) )
+                    {
+                        $def .= $this->createNodeRelation(
+                            $this->getUniqueId( $this->structure[$param->type] ),
+                            $this->getUniqueId( $o ),
+                            array(
+                                'dir'       => 'back',
+                                'arrowtail' => 'none',
+                                'style'     => 'dashed',
+                            )
+                        );
+                        $associations[strtolower( $param->type )] = true;
+                    }
+                }
+            }
+        }
+
+        // Create the node
+        $def .= $this->createNode(
+            $this->getUniqueId( $o ),
+            array(
+                'label' => $this->createTraitLabel( $name, $attributes, $functions ),
+                'shape' => 'plaintext',
+            )
+        );
+
+        foreach( $o->uses as $trait )
+        {
+            // Check if we need an "external" interface node
+            if ( in_array( $trait, $this->structure ) !== true )
+            {
+                $def .= $this->getTraitDefinition( $trait );
+            }
+
+            $def .= $this->createNodeRelation(
+                $this->getUniqueId( $trait ),
+                $this->getUniqueId( $o ),
+                array(
                     'dir'       => 'back',
                     'arrowtail' => 'normal',
                     'style'     => 'dashed',
@@ -313,6 +437,44 @@ class plGraphvizProcessor extends plProcessor
         foreach( $functions as $function ) 
         {
             $label .= '<FONT COLOR="' . $this->options->style->interfaceFunctionsColor . '" FACE="' . $this->options->style->interfaceFunctionsFont . '" POINT-SIZE="' . $this->options->style->interfaceFunctionsFontsize . '">' . $function . '</FONT><BR ALIGN="LEFT"/>';
+        }
+        $label .= '</TD></TR>';
+
+        // End the table
+        $label .= '</TABLE>>';
+
+        return $label;
+    }
+
+    private function createTraitLabel( $name, $attributes, $functions )
+    {
+        // Start the table
+        $label = '<<TABLE CELLSPACING="0" BORDER="0" ALIGN="LEFT">';
+
+        // The title
+        $label .= '<TR><TD BORDER="' . $this->options->style->traitTableBorder . '" ALIGN="CENTER" BGCOLOR="' . $this->options->style->traitTitleBackground . '"><FONT COLOR="' . $this->options->style->traitTitleColor . '" FACE="' . $this->options->style->traitTitleFont . '" POINT-SIZE="' . $this->options->style->traitTitleFontsize . '">' . $name . '</FONT></TD></TR>';
+
+        // The attributes block
+        $label .= '<TR><TD BORDER="' . $this->options->style->traitTableBorder . '" ALIGN="LEFT" BGCOLOR="' . $this->options->style->traitAttributesBackground . '">';
+        if ( count( $attributes ) === 0 )
+        {
+            $label .= ' ';
+        }
+        foreach( $attributes as $attribute )
+        {
+            $label .= '<FONT COLOR="' . $this->options->style->traitAttributesColor . '" FACE="' . $this->options->style->traitAttributesFont . '" POINT-SIZE="' . $this->options->style->traitAttributesFontsize . '">' . $attribute . '</FONT><BR ALIGN="LEFT"/>';
+        }
+        $label .= '</TD></TR>';
+
+        // The function block
+        $label .= '<TR><TD BORDER="' . $this->options->style->traitTableBorder . '" ALIGN="LEFT" BGCOLOR="' . $this->options->style->traitFunctionsBackground . '">';
+        if ( count( $functions ) === 0 )
+        {
+            $label .= ' ';
+        }
+        foreach( $functions as $function )
+        {
+            $label .= '<FONT COLOR="' . $this->options->style->traitFunctionsColor . '" FACE="' . $this->options->style->traitFunctionsFont . '" POINT-SIZE="' . $this->options->style->traitFunctionsFontsize . '">' . $function . '</FONT><BR ALIGN="LEFT"/>';
         }
         $label .= '</TD></TR>';
 

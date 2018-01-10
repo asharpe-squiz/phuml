@@ -4,6 +4,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
 {
     private $classes;
     private $interfaces;
+    private $traits;
 
     private $parserStruct;
     private $lastToken;
@@ -18,6 +19,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
     {
         $this->classes      = array();
         $this->interfaces   = array();
+        $this->traits       = array();
     }
 
     private function initParserAttributes() 
@@ -25,6 +27,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
         $this->parserStruct = array( 
             'class'         => null,
             'interface'     => null,
+            'trait'         => null,
             'function'      => null,
             'attributes'    => array(),
             'functions'     => array(),
@@ -32,6 +35,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             'params'        => array(),
             'implements'    => array(),
             'extends'       => array(),
+            'uses'          => array(),
             'modifier'      => 'public',            
             'docblock'      => null,
         );
@@ -49,7 +53,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             $tokens = token_get_all( file_get_contents( $file ) );
 
             // Loop through all tokens
-            foreach( $tokens as $token ) 
+            foreach( $tokens as $i => $token )
             {
                 // Split into Simple and complex token
                 if ( is_array( $token ) !== true ) 
@@ -127,6 +131,14 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                         case T_CLASS:
                             $this->t_class( $token );
                         break;
+
+                        case T_TRAIT:
+                            $this->t_trait( $token );
+                        break;
+
+                        case T_USE:
+                            $this->t_use( $token );
+                        break;
                         
                         case T_IMPLEMENTS:
                             $this->t_implements( $token );
@@ -170,7 +182,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
         $this->fixObjectConnections();
 
         // Return the class and interface structure
-        return array_merge( $this->classes, $this->interfaces );
+        return array_merge( $this->classes, $this->interfaces, $this->traits );
     }
 
     private function comma() 
@@ -361,7 +373,12 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                 $this->parserStruct['extends'][] = $token[1];
                 // We do not reset the last token here, because
                 // interfaces can extend multiple interfaces
-            break;                        
+            break;
+            case T_USE:
+                $this->parserStruct['uses'][] = $token[1];
+                // We do not reset the last token here, because
+                // we can use multiple traits
+            break;
             case T_FUNCTION:
                 // Add the current function only if there is no function name already
                 // Because if we know the function name already this is a type hint
@@ -382,11 +399,35 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                 // Reset the last token
                 $this->lastToken = null;
             break;
+            case T_TRAIT:
+                // Set the class name
+                $this->parserStruct['trait'] = $token[1];
+                // Reset the last token
+                $this->lastToken = null;
+            break;
             case T_INTERFACE:
                 // Set the interface name
                 $this->parserStruct['interface'] = $token[1];
                 // Reset the last Token
                 $this->lastToken = null;
+            break;
+            default:
+                $this->lastToken = null;
+        }
+    }
+
+    private function t_trait( $token )
+    {
+        switch( $this->lastToken )
+        {
+            case null:
+                // New initial trait token
+                // Store the class/interface/trait definition if there is any in the
+                // parser arrays ( There might be more than one per file )
+                $this->storeClassOrInterfaceOrTrait();
+
+                // Remember the last token
+                $this->lastToken = $token[0];
             break;
             default:
                 $this->lastToken = null;
@@ -437,6 +478,18 @@ class plStructureTokenparserGenerator extends plStructureGenerator
         {
             case null:
             case T_EXTENDS:
+                $this->lastToken = $token[0];
+            break;
+            default:
+                $this->lastToken = null;
+        }
+    }
+
+    private function t_use ( $token )
+    {
+        switch ( $this->lastToken )
+        {
+            case null:
                 $this->lastToken = $token[0];
             break;
             default:
@@ -508,100 +561,204 @@ class plStructureTokenparserGenerator extends plStructureGenerator
         }
     }
 
-    private function storeClassOrInterface() 
+    private function storeInterface()
     {
         // First we need to check if we should store interface data found so far
-        if ( $this->parserStruct['interface'] !== null ) 
+        if ( $this->parserStruct['interface'] === null )
         {
-            // Init data storage
-            $functions = array();
-
-            // Create the data objects
-            foreach( $this->parserStruct['functions'] as $function ) 
-            {
-                // Create the needed parameter objects
-                $params = array();
-                foreach( $function[2] as $param) 
-                {
-                    $params[] = new plPhpFunctionParameter( $param[1], $param[0] );
-                }
-                $functions[] = new plPhpFunction( 
-                    $function[0],
-                    $function[1],
-                    $params
-                );                                    
-            }
-            $interface = new plPhpInterface( 
-                $this->parserStruct['interface'],
-                $functions,
-                $this->parserStruct['extends']
-            );                              
-            
-            // Store in the global interface array
-            $this->interfaces[$this->parserStruct['interface']] = $interface;
+            // TODO log something
+            return;
         }
-        // If there is no interface, we maybe need to store a class
-        else if ( $this->parserStruct['class'] !== null ) 
+
+        // Init data storage
+        $functions = array();
+
+        // Create the data objects
+        foreach( $this->parserStruct['functions'] as $function )
         {
-            // Init data storage
-            $functions  = array();
-            $attributes = array();
-
-            // Create the data objects
-            foreach( $this->parserStruct['functions'] as $function ) 
+            // Create the needed parameter objects
+            $params = array();
+            foreach( $function[2] as $param)
             {
-                // Create the needed parameter objects
-                $params = array();
-                foreach( $function[2] as $param) 
-                {
-                    $params[] = new plPhpFunctionParameter( $param[1], $param[0] );
-                }
-                $functions[] = new plPhpFunction( 
-                    $function[0],
-                    $function[1],
-                    $params
-                );                                    
+                $params[] = new plPhpFunctionParameter( $param[1], $param[0] );
             }
-            foreach ( $this->parserStruct['attributes'] as $attribute ) 
-            {
-                $type = null;
-                // If there is a docblock try to isolate the attribute type
-                if ( $attribute[2] !== null ) 
-                {
-                    // Regular expression that extracts types in array annotations
-                    $regexp = '/^[\s*]*@var\s+array\(\s*(\w+\s*=>\s*)?(\w+)\s*\).*$/m';
-                    if ( preg_match( $regexp, $attribute[2], $matches ) )
-                    {
-                        $type = $matches[2];
-                    }
-                    else if ( $return = preg_match( '/^[\s*]*@var\s+(\S+).*$/m', $attribute[2], $matches ) )
-                    {
-                        $type = trim( $matches[1] );
-                    }
-                }
-                $attributes[] = new plPhpAttribute( 
-                    $attribute[0],
-                    $attribute[1],
-                    $type
-                );
-            }
+            $functions[] = new plPhpFunction(
+                $function[0],
+                $function[1],
+                $params
+            );
+        }
+        $interface = new plPhpInterface(
+            $this->parserStruct['interface'],
+            $functions,
+            $this->parserStruct['extends']
+        );
 
-            $class = new plPhpClass( 
-                $this->parserStruct['class'],
-                $attributes,
-                $functions,
-                $this->parserStruct['implements'],
-                $this->parserStruct['extends']
-            );                              
-            
-            $this->classes[$this->parserStruct['class']] = $class;
+        // Store in the global interface array
+        $this->interfaces[$this->parserStruct['interface']] = $interface;
+    }
+
+    private function storeClass() {
+        // If there is no interface, we maybe need to store a class
+        if ( $this->parserStruct['class'] === null ) {
+            // TODO log something
+            return;
+        }
+
+        // Init data storage
+        $functions  = array();
+        $attributes = array();
+
+        // Create the data objects
+        foreach( $this->parserStruct['functions'] as $function )
+        {
+            // Create the needed parameter objects
+            $params = array();
+            foreach( $function[2] as $param)
+            {
+                $params[] = new plPhpFunctionParameter( $param[1], $param[0] );
+            }
+            $functions[] = new plPhpFunction(
+                $function[0],
+                $function[1],
+                $params
+            );
+        }
+
+        foreach ( $this->parserStruct['attributes'] as $attribute )
+        {
+            $type = null;
+            // If there is a docblock try to isolate the attribute type
+            if ( $attribute[2] !== null )
+            {
+                // Regular expression that extracts types in array annotations
+                $regexp = '/^[\s*]*@var\s+array\(\s*(\w+\s*=>\s*)?(\w+)\s*\).*$/m';
+                if ( preg_match( $regexp, $attribute[2], $matches ) )
+                {
+                    $type = $matches[2];
+                }
+                else if ( $return = preg_match( '/^[\s*]*@var\s+(\S+).*$/m', $attribute[2], $matches ) )
+                {
+                    $type = trim( $matches[1] );
+                }
+            }
+            $attributes[] = new plPhpAttribute(
+                $attribute[0],
+                $attribute[1],
+                $type
+            );
+        }
+
+        $class = new plPhpClass(
+            $this->parserStruct['class'],
+            $attributes,
+            $functions,
+            $this->parserStruct['implements'],
+            $this->parserStruct['extends'],
+            $this->parserStruct['uses']
+        );
+
+        $this->classes[$this->parserStruct['class']] = $class;
+
+    }
+
+    // TODO deprecate
+    private function storeClassOrInterface()
+    {
+        $this->storeClassOrInterfaceOrTrait();
+    }
+
+    private function storeClassOrInterfaceOrTrait()
+    {
+        switch (true)
+        {
+            case $this->parserStruct['interface'] !== null:
+                $this->storeInterface();
+            break;
+
+            case $this->parserStruct['class'] !== null:
+                $this->storeClass();
+            break;
+
+            case $this->parserStruct['trait'] !== null:
+                $this->storeTrait();
+            break;
         }
 
         $this->initParserAttributes();
     }
 
+    private function storeTrait() {
+        // First we need to check if we should store interface data found so far
+        if ( $this->parserStruct['trait'] === null )
+        {
+            // TODO log something
+            return;
+        }
+
+        // Init data storage
+        $functions = array();
+        $attributes = array();
+
+        // Create the data objects
+        foreach( $this->parserStruct['functions'] as $function )
+        {
+            // Create the needed parameter objects
+            $params = array();
+            foreach( $function[2] as $param)
+            {
+                $params[] = new plPhpFunctionParameter( $param[1], $param[0] );
+            }
+            $functions[] = new plPhpFunction(
+                $function[0],
+                $function[1],
+                $params
+            );
+        }
+
+        foreach ( $this->parserStruct['attributes'] as $attribute )
+        {
+            $type = null;
+            // If there is a docblock try to isolate the attribute type
+            if ( $attribute[2] !== null )
+            {
+                // Regular expression that extracts types in array annotations
+                $regexp = '/^[\s*]*@var\s+array\(\s*(\w+\s*=>\s*)?(\w+)\s*\).*$/m';
+                if ( preg_match( $regexp, $attribute[2], $matches ) )
+                {
+                    $type = $matches[2];
+                }
+                else if ( $return = preg_match( '/^[\s*]*@var\s+(\S+).*$/m', $attribute[2], $matches ) )
+                {
+                    $type = trim( $matches[1] );
+                }
+            }
+            $attributes[] = new plPhpAttribute(
+                $attribute[0],
+                $attribute[1],
+                $type
+            );
+        }
+
+        $trait = new plPhpTrait(
+            $this->parserStruct['trait'],
+            $attributes,
+            $functions,
+            $this->parserStruct['uses']
+        );
+
+        // Store in the global interface array
+        $this->traits[$this->parserStruct['trait']] = $trait;
+    }
+
     private function fixObjectConnections() 
     {
+        $this->fixClassConnections();
+        $this->fixInterfaceConnections();
+        $this->fixTraitConnections();
+    }
+
+    private function fixClassConnections() {
         foreach( $this->classes as $class ) 
         {
             $implements = array();
@@ -612,6 +769,15 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                                     : $this->interfaces[$impl] = new plPhpInterface( $impl );
             }
             $class->implements = $implements;
+
+            $uses = array();
+            foreach( $class->uses as $key => $trait )
+            {
+                $uses[$key] = array_key_exists( $trait, $this->traits )
+                                    ? $this->traits[$trait]
+                                    : $this->traits[$trait] = new plPhpTrait( $trait );
+            }
+            $class->uses = $uses;
 
             # classes can only extend once
             if ( count($class->extends) === 0 )
@@ -624,7 +790,10 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                               ? $this->classes[$class->extends] 
                               : ( $this->classes[$class->extends] = new plPhpClass( $class->extends ) );
         }
-        foreach( $this->interfaces as $interface ) 
+    }
+
+    private function fixInterfaceConnections() {
+        foreach( $this->interfaces as $interface )
         {
             $extends = array();
             foreach( $interface->extends as $key => $impl )
@@ -636,6 +805,20 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             $interface->extends = $extends;
         }
     }
+
+    private function fixTraitConnections() {
+        foreach( $this->traits as $trait )
+        {
+            $uses = array();
+            foreach( $trait->uses as $key => $subTrait )
+            {
+                $uses[$key] = array_key_exists( $subTrait, $this->traits )
+                                    ? $this->traits[$subTrait]
+                                    : $this->traits[$subTrait] = new plPhpTrait( $subTrait );
+            }
+            $trait->uses = $uses;
+
+        }
+    }
 }
 
-?>
