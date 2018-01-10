@@ -4,7 +4,7 @@ class plPhpInterface
 {
     private $properties;
 
-    public function __construct( $name, $functions = array(), $extends = null ) 
+    public function __construct( $name, $functions = array(), $extends = array() )
     {
         $this->properties = array( 
             'name'      =>  $name,

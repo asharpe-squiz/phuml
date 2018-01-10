@@ -31,7 +31,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             'typehint'      => null,
             'params'        => array(),
             'implements'    => array(),
-            'extends'       => null,
+            'extends'       => array(),
             'modifier'      => 'public',            
             'docblock'      => null,
         );
@@ -358,9 +358,9 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             break;
             case T_EXTENDS:
                 // Set the superclass
-                $this->parserStruct['extends'] = $token[1];
-                // Reset the last token
-                $this->lastToken = null;
+                $this->parserStruct['extends'][] = $token[1];
+                // We do not reset the last token here, because
+                // interfaces can extend multiple interfaces
             break;                        
             case T_FUNCTION:
                 // Add the current function only if there is no function name already
@@ -436,6 +436,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
         switch ( $this->lastToken ) 
         {
             case null:
+            case T_EXTENDS:
                 $this->lastToken = $token[0];
             break;
             default:
@@ -584,6 +585,7 @@ class plStructureTokenparserGenerator extends plStructureGenerator
                     $type
                 );
             }
+
             $class = new plPhpClass( 
                 $this->parserStruct['class'],
                 $attributes,
@@ -611,23 +613,27 @@ class plStructureTokenparserGenerator extends plStructureGenerator
             }
             $class->implements = $implements;
 
-            if ( $class->extends === null ) 
+            # classes can only extend once
+            if ( count($class->extends) === 0 )
             {
+                $class->extends = null;
                 continue;
             }
+            $class->extends = $class->extends[0];
             $class->extends = array_key_exists( $class->extends, $this->classes ) 
                               ? $this->classes[$class->extends] 
                               : ( $this->classes[$class->extends] = new plPhpClass( $class->extends ) );
         }
         foreach( $this->interfaces as $interface ) 
-        {           
-            if ( $interface->extends === null ) 
+        {
+            $extends = array();
+            foreach( $interface->extends as $key => $impl )
             {
-                continue;
+                $extends[$key] = array_key_exists( $impl, $this->interfaces )
+                                    ? $this->interfaces[$impl]
+                                    : $this->interfaces[$impl] = new plPhpInterface( $impl );
             }
-            $interface->extends = array_key_exists( $interface->extends, $this->interfaces ) 
-                                 ? $this->interfaces[$interface->extends] 
-                                 : ( $this->interfaces[$interface->extends] = new plPhpInterface( $interface->extends ) );
+            $interface->extends = $extends;
         }
     }
 }

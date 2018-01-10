@@ -137,6 +137,7 @@ class plGraphvizProcessor extends plProcessor
         // Create class inheritance relation
         if ( $o->extends !== null ) 
         {
+
             // Check if we need an "external" class node
             if ( in_array( $o->extends, $this->structure ) !== true ) 
             {
@@ -200,16 +201,15 @@ class plGraphvizProcessor extends plProcessor
         );
 
         // Create interface inheritance relation        
-        if ( $o->extends !== null ) 
-        {
+        foreach ($o->extends as $key => $impl) {
             // Check if we need an "external" interface node
-            if ( in_array( $o->extends, $this->structure ) !== true ) 
+            if ( in_array( $impl, $this->structure ) !== true )
             {
-                $def .= $this->getInterfaceDefinition( $o->extends );
+                $def .= $this->getInterfaceDefinition( $impl );
             }
 
             $def .= $this->createNodeRelation( 
-                $this->getUniqueId( $o->extends ),
+                $this->getUniqueId( $impl ),
                 $this->getUniqueId( $o ),
                 array( 
                     'dir'       => 'back',
